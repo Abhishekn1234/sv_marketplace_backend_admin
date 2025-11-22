@@ -67,16 +67,25 @@ export const GetRoleController = async (_req: Request, res: Response) => {
       if (existing) existing.modules.push(...modules);
     }
 
-    const formattedRoles = Array.from(roleMap.values()).map(role => ({
-      ...role,
-      modules: role.modules.map(mod => ({
-        _id: mod._id,
-        module: mod.module,
-        modulelanguagekey: mod.modulelanguagekey,
-        sort: mod.sort,
-        parent: mod.parent,
-      })),
-    }));
+    const formattedRoles = Array.from(roleMap.values()).map(role => {
+  const flattenedModules: Record<string, any> = {};
+
+  role.modules.forEach(mod => {
+    // Use module name as key and rest as value
+    flattenedModules[mod.module] = {
+      modulelanguagekey: mod.modulelanguagekey,
+      sort: mod.sort,
+      parent: mod.parent,
+    };
+  });
+
+  return {
+    _id: role._id,
+    name: role.name,
+    ...flattenedModules, // spread modules as top-level keys
+  };
+});
+
 
     return res.status(200).json(formattedRoles);
   } catch (err: any) {
