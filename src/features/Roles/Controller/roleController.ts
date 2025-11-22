@@ -70,25 +70,41 @@ export const GetRoleController = async (_req: Request, res: Response) => {
       .populate("user_group_id")
       .populate("module_id");
 
-    const formattedRoles = roles
-      // Filter out entries where user_group_id is null
-      .filter(role => role.user_group_id !== null)
-      .map(role => {
-        const userGroup = role.user_group_id as UserRole;
-        const modules = (role.module_id as IModule[]) || [];
+    // Use a Map to group modules by role
+    const roleMap = new Map<string, { _id: string; name: string; modules: IModule[] }>();
 
-        return {
-          _id: userGroup._id,
+    roles.forEach(role => {
+      if (!role.user_group_id) return; // skip if role is missing
+
+      const userGroup = role.user_group_id as UserRole;
+      const modules = (role.module_id as IModule[]) || [];
+
+      if (!roleMap.has(userGroup._id.toString())) {
+        roleMap.set(userGroup._id.toString(), {
+          _id: userGroup._id.toString(),
           name: userGroup.name,
-          modules: modules.map(mod => ({
-            _id: mod._id,
-            module: mod.module,
-            modulelanguagekey: mod.modulelanguagekey,
-            sort: mod.sort,
-            parent: mod.parent,
-          })),
-        };
-      });
+          modules: [],
+        });
+      }
+
+      // Add modules to the role, avoid duplicates if needed
+      const existing = roleMap.get(userGroup._id.toString());
+      if (existing) {
+        existing.modules.push(...modules);
+      }
+    });
+
+    // Convert Map values to array
+    const formattedRoles = Array.from(roleMap.values()).map(role => ({
+      ...role,
+      modules: role.modules.map(mod => ({
+        _id: mod._id,
+        module: mod.module,
+        modulelanguagekey: mod.modulelanguagekey,
+        sort: mod.sort,
+        parent: mod.parent,
+      })),
+    }));
 
     return res.status(200).json(formattedRoles);
   } catch (err: any) {
@@ -96,7 +112,6 @@ export const GetRoleController = async (_req: Request, res: Response) => {
     return res.status(500).json({ message: err.message });
   }
 };
-
 
 export const GetRoleByIdController = async (req: Request, res: Response) => {
   const { id } = req.params;
@@ -106,21 +121,32 @@ export const GetRoleByIdController = async (req: Request, res: Response) => {
   }
 
   try {
-    const role = await UserModules.findOne({ user_group_id: id })
-      .populate("module_id")
-      .populate("user_group_id");
+    // Find all UserModules for this role
+    const userModules = await UserModules.find({ user_group_id: id })
+      .populate("user_group_id")
+      .populate("module_id");
 
-    if (!role || !role.user_group_id) {
+    if (!userModules.length) {
       return res.status(404).json({ message: "Role not found" });
     }
 
-    const userGroup = role.user_group_id as UserRole;
-    const modules = (role.module_id as IModule[]) || [];
+    // Assume all entries have the same role
+    const firstRole = userModules[0].user_group_id as UserRole;
+    if (!firstRole) {
+      return res.status(404).json({ message: "Role not found" });
+    }
+
+    // Combine all modules
+    const allModules: IModule[] = [];
+    userModules.forEach(um => {
+      const modules = (um.module_id as IModule[]) || [];
+      allModules.push(...modules);
+    });
 
     const formattedRole = {
-      _id: userGroup._id,
-      name: userGroup.name,
-      modules: modules.map(mod => ({
+      _id: firstRole._id.toString(),
+      name: firstRole.name,
+      modules: allModules.map(mod => ({
         _id: mod._id,
         module: mod.module,
         modulelanguagekey: mod.modulelanguagekey,
