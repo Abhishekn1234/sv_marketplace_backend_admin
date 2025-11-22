@@ -11,6 +11,7 @@ import {
 import { Module, PERMISSION_REGEX, RoleNameRegex, UserModules } from "shared-lib";
 import { UserAddmoduleServices } from "../../UserModule/Services/usermodule.services";
 import { AuthRequest } from "../../Auth/Middlewares/authMiddleware";
+import mongoose from "mongoose";
 
 
 export const CreateRoleController = async (req: Request, res: Response) => {
@@ -23,17 +24,27 @@ export const CreateRoleController = async (req: Request, res: Response) => {
       });
     }
 
-    // Create role
+    // 🔥 CHECK: module_ids must be an array of ObjectIds
+    if (
+      !Array.isArray(module_ids) ||
+      module_ids.some((id) => !mongoose.Types.ObjectId.isValid(id))
+    ) {
+      return res.status(400).json({
+        message: "Invalid module_ids: all module IDs must be valid ObjectId strings",
+      });
+    }
+
+    // ➤ Create role
     const role = await RoleAddServices(name);
 
-    // Save module relations
+    // ➤ Save module relations
     await Promise.all(
       module_ids.map(async (module_id: string) => {
         await UserAddmoduleServices(role._id.toString(), module_id);
       })
     );
 
-    // Fetch complete module details
+    // ➤ Fetch module details
     const modules = await Module.find({
       _id: { $in: module_ids },
     }).select("_id module modulelanguagekey sort parent");
@@ -41,7 +52,7 @@ export const CreateRoleController = async (req: Request, res: Response) => {
     return res.status(201).json({
       _id: role._id,
       name: role.name,
-      modules, // one array with full details
+      modules,
     });
   } catch (err: any) {
     console.error(err);
@@ -67,21 +78,23 @@ export const GetRoleController = async (_req: Request, res: Response) => {
 };
 
 
-// --- GET ROLE BY ID ---
-export const GetRoleByIdController = async (req: AuthRequest, res: Response) => {
-  try {
-    const { id } = req.params;
+export const GetRoleByIdController = async (req: Request, res:Response) => {
+  const { id } = req.params;
 
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ message: "Invalid role ID" });
+  }
+
+  try {
     const role = await UserModules.findOne({ user_group_id: id })
-      .populate("user_group_id")
-      .populate("module_id");
+      .populate("module_id")
+      .populate("user_group_id");
 
     if (!role) return res.status(404).json({ message: "Role not found" });
 
     return res.status(200).json(role);
-  } catch (err: any) {
-    console.error(err);
-    return res.status(404).json({ message: err.message });
+  } catch (err:any) {
+    return res.status(500).json({ message: err.message });
   }
 };
 

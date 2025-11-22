@@ -1,11 +1,16 @@
 import { UserModules,IUserModules, UserModuleService } from "shared-lib";
-import { Types } from "mongoose";
+import mongoose, { Types } from "mongoose";
 import { Request,Response } from "express";
-
-export const UserAddmoduleServices=async(user_group_id:string,module_id:string)=>{
-   const useradd=await UserModuleService.createUserModule(user_group_id,module_id);
-   return useradd;
-}
+export const UserAddmoduleServices = async (
+  user_group_id: mongoose.Types.ObjectId | string,
+  module_id: mongoose.Types.ObjectId | string
+) => {
+  const useradd = await UserModuleService.createUserModule(
+    user_group_id.toString(),
+    module_id.toString()
+  );
+  return useradd;
+};
 export const UserFindModuleServices=async(user_group_id:string,module_id:string)=>{
     const userfind=await UserModuleService.findUserModuleByGroupAndModule(user_group_id,module_id);
     return userfind;
