@@ -102,8 +102,8 @@ export const GetRoleByIdController = async (req: Request, res:Response) => {
 // --- UPDATE ROLE ---
 export const UpdateRoleController = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
-    const { name, module_ids } = req.body;
+    
+    const { name, module_ids,id } = req.body;
 
     if (name && !RoleNameRegex.test(name)) {
       return res.status(400).json({
