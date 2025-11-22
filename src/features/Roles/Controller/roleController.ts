@@ -66,27 +66,29 @@ export const CreateRoleController = async (req: Request, res: Response) => {
 // --- GET ALL ROLES ---
 export const GetRoleController = async (_req: Request, res: Response) => {
   try {
-    // Fetch all roles with populated modules
     const roles = await UserModules.find()
       .populate("user_group_id")
       .populate("module_id");
 
-    const formattedRoles = roles.map(role => {
-      const userGroup = role.user_group_id as UserRole; // type assertion
-      const modules = role.module_id as IModule[];      // type assertion
+    const formattedRoles = roles
+      // Filter out entries where user_group_id is null
+      .filter(role => role.user_group_id !== null)
+      .map(role => {
+        const userGroup = role.user_group_id as UserRole;
+        const modules = (role.module_id as IModule[]) || [];
 
-      return {
-        _id: userGroup._id,
-        name: userGroup.name,
-        modules: modules.map(mod => ({
-          _id: mod._id,
-          module: mod.module,
-          modulelanguagekey: mod.modulelanguagekey,
-          sort: mod.sort,
-          parent: mod.parent,
-        })),
-      };
-    });
+        return {
+          _id: userGroup._id,
+          name: userGroup.name,
+          modules: modules.map(mod => ({
+            _id: mod._id,
+            module: mod.module,
+            modulelanguagekey: mod.modulelanguagekey,
+            sort: mod.sort,
+            parent: mod.parent,
+          })),
+        };
+      });
 
     return res.status(200).json(formattedRoles);
   } catch (err: any) {
