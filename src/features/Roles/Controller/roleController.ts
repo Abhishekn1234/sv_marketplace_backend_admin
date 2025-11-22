@@ -98,7 +98,6 @@ export const GetRoleController = async (_req: Request, res: Response) => {
 };
 
 
-
 export const GetRoleByIdController = async (req: Request, res: Response) => {
   const { id } = req.params;
 
@@ -111,11 +110,12 @@ export const GetRoleByIdController = async (req: Request, res: Response) => {
       .populate("module_id")
       .populate("user_group_id");
 
-    if (!role) return res.status(404).json({ message: "Role not found" });
+    if (!role || !role.user_group_id) {
+      return res.status(404).json({ message: "Role not found" });
+    }
 
-    // Type assertions for populated data
     const userGroup = role.user_group_id as UserRole;
-    const modules = role.module_id as IModule[];
+    const modules = (role.module_id as IModule[]) || [];
 
     const formattedRole = {
       _id: userGroup._id,
