@@ -8,7 +8,7 @@ import {
   RoleAll,
   RoleById,
 } from "../Services/RoleService";
-import { Module, PERMISSION_REGEX, RoleNameRegex, UserModules } from "shared-lib";
+import { IModule, IUserModules, Module, PERMISSION_REGEX, RoleNameRegex, UserModules, UserRole } from "shared-lib";
 import { UserAddmoduleServices } from "../../UserModule/Services/usermodule.services";
 import { AuthRequest } from "../../Auth/Middlewares/authMiddleware";
 import mongoose from "mongoose";
@@ -66,11 +66,29 @@ export const CreateRoleController = async (req: Request, res: Response) => {
 // --- GET ALL ROLES ---
 export const GetRoleController = async (_req: Request, res: Response) => {
   try {
+    // Fetch all roles with populated modules
     const roles = await UserModules.find()
       .populate("user_group_id")
       .populate("module_id");
 
-    return res.status(200).json(roles);
+    const formattedRoles = roles.map(role => {
+      const userGroup = role.user_group_id as UserRole; // type assertion
+      const modules = role.module_id as IModule[];      // type assertion
+
+      return {
+        _id: userGroup._id,
+        name: userGroup.name,
+        modules: modules.map(mod => ({
+          _id: mod._id,
+          module: mod.module,
+          modulelanguagekey: mod.modulelanguagekey,
+          sort: mod.sort,
+          parent: mod.parent,
+        })),
+      };
+    });
+
+    return res.status(200).json(formattedRoles);
   } catch (err: any) {
     console.error(err);
     return res.status(500).json({ message: err.message });
@@ -78,7 +96,8 @@ export const GetRoleController = async (_req: Request, res: Response) => {
 };
 
 
-export const GetRoleByIdController = async (req: Request, res:Response) => {
+
+export const GetRoleByIdController = async (req: Request, res: Response) => {
   const { id } = req.params;
 
   if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -92,8 +111,25 @@ export const GetRoleByIdController = async (req: Request, res:Response) => {
 
     if (!role) return res.status(404).json({ message: "Role not found" });
 
-    return res.status(200).json(role);
-  } catch (err:any) {
+    // Type assertions for populated data
+    const userGroup = role.user_group_id as UserRole;
+    const modules = role.module_id as IModule[];
+
+    const formattedRole = {
+      _id: userGroup._id,
+      name: userGroup.name,
+      modules: modules.map(mod => ({
+        _id: mod._id,
+        module: mod.module,
+        modulelanguagekey: mod.modulelanguagekey,
+        sort: mod.sort,
+        parent: mod.parent,
+      })),
+    };
+
+    return res.status(200).json(formattedRole);
+  } catch (err: any) {
+    console.error(err);
     return res.status(500).json({ message: err.message });
   }
 };
