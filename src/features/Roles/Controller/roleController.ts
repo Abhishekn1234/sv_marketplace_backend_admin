@@ -1,16 +1,20 @@
 import { Request, Response } from "express";
 import mongoose from "mongoose";
-
 import {
   RoleAddServices,
   RoleUpdateServices,
   RoleDeleteServices,
 } from "../Services/RoleService";
-import { IModule, UserRole } from "shared-lib";
-import { UserModuleService } from "shared-lib";
-import { RoleNameRegex } from "shared-lib";
+import { IModule, UserRole, UserModuleService, RoleNameRegex } from "shared-lib";
 
-// --- CREATE ROLE ---
+import {
+  formatModules,
+  validateModuleIds,
+  createRoleModules,
+  buildRoleMap,
+  extractRoleModules,
+} from "../../../utils/role";
+
 export const CreateRoleController = async (req: Request, res: Response) => {
   try {
     const { name, module_ids } = req.body;
@@ -21,68 +25,37 @@ export const CreateRoleController = async (req: Request, res: Response) => {
       });
     }
 
-    if (!Array.isArray(module_ids) || module_ids.some(id => !mongoose.Types.ObjectId.isValid(id))) {
-      return res.status(400).json({
-        message: "Invalid module_ids: all module IDs must be valid ObjectId strings",
-      });
+    const valid = validateModuleIds(module_ids);
+    if (!valid.success) {
+      return res.status(400).json({ message: valid.message });
     }
 
-    // Create role
     const role = await RoleAddServices(name);
 
-    // Assign modules
-    await Promise.all(
-      module_ids.map(module_id => UserModuleService.createUserModule(role._id.toString(), module_id))
+    await createRoleModules(role._id.toString(), module_ids);
+
+    const userModules = await UserModuleService.getUserModuleByRoleId(
+      role._id.toString()
     );
-
-    // Fetch populated modules
-    const userModules = await UserModuleService.getUserModuleByRoleId(role._id.toString());
-
-    const modules = userModules.flatMap(m => {
-      const mods = Array.isArray(m.module_id) ? (m.module_id as IModule[]) : [(m.module_id as IModule)];
-      return mods.map(mod => ({
-        _id: mod._id,
-        module: mod.module,
-        modulelanguagekey: mod.modulelanguagekey,
-        sort: mod.sort,
-        parent: mod.parent,
-      }));
-    });
 
     return res.status(201).json({
       _id: role._id,
       name: role.name,
-      modules,
+      modules: formatModules(userModules),
     });
   } catch (err: any) {
-    console.error(err);
     return res.status(500).json({ message: err.message });
   }
 };
 
-// --- GET ALL ROLES ---
 export const GetRoleController = async (_req: Request, res: Response) => {
   try {
     const userModules = await UserModuleService.getAllUserModules();
+    const roleMap = buildRoleMap(userModules);
 
-    const roleMap = new Map<string, { _id: string; name: string; modules: IModule[] }>();
-
-    userModules.forEach(um => {
-      if (!um.user_group_id) return;
-      const role = um.user_group_id as UserRole;
-
-      const mods = Array.isArray(um.module_id) ? (um.module_id as IModule[]) : [(um.module_id as IModule)];
-
-      if (!roleMap.has(role._id.toString())) {
-        roleMap.set(role._id.toString(), { _id: role._id.toString(), name: role.name, modules: [] });
-      }
-
-      roleMap.get(role._id.toString())?.modules.push(...mods);
-    });
-
-    const formattedRoles = Array.from(roleMap.values()).map(role => ({
+    const roles = Array.from(roleMap.values()).map((role) => ({
       ...role,
-      modules: role.modules.map(mod => ({
+      modules: role.modules.map((mod) => ({
         _id: mod._id,
         module: mod.module,
         modulelanguagekey: mod.modulelanguagekey,
@@ -91,14 +64,12 @@ export const GetRoleController = async (_req: Request, res: Response) => {
       })),
     }));
 
-    return res.status(200).json(formattedRoles);
+    return res.status(200).json(roles);
   } catch (err: any) {
-    console.error(err);
     return res.status(500).json({ message: err.message });
   }
 };
 
-// --- GET ROLE BY ID ---
 export const GetRoleByIdController = async (req: Request, res: Response) => {
   const { id } = req.params;
 
@@ -109,91 +80,54 @@ export const GetRoleByIdController = async (req: Request, res: Response) => {
   try {
     const userModules = await UserModuleService.getUserModuleByRoleId(id);
 
-    if (!userModules.length) return res.status(404).json({ message: "Role not found" });
+    if (!userModules.length)
+      return res.status(404).json({ message: "Role not found" });
 
     const role = userModules[0].user_group_id as UserRole;
 
-    const modules = userModules.flatMap(um => {
-      const mods = Array.isArray(um.module_id) ? (um.module_id as IModule[]) : [(um.module_id as IModule)];
-      return mods.map(mod => ({
-        _id: mod._id,
-        module: mod.module,
-        modulelanguagekey: mod.modulelanguagekey,
-        sort: mod.sort,
-        parent: mod.parent,
-      }));
-    });
-
     return res.status(200).json({
-      _id: role._id.toString(),
+      _id: role._id,
       name: role.name,
-      modules,
+      modules: formatModules(userModules),
     });
   } catch (err: any) {
-    console.error(err);
     return res.status(500).json({ message: err.message });
   }
 };
 
-// --- UPDATE ROLE ---
 export const UpdateRoleController = async (req: Request, res: Response) => {
   const { id } = req.params;
   const { name, module_ids } = req.body;
 
   try {
     if (name && !RoleNameRegex.test(name)) {
-      return res
-        .status(400)
-        .json({ message: "Invalid Role Name format; it should contain letters only" });
+      return res.status(400).json({
+        message: "Invalid Role Name format; it should contain letters only",
+      });
     }
 
-    // Update role name only if provided
     if (name) {
       await RoleUpdateServices(id, { name });
     }
 
-    // Update modules if provided
     if (Array.isArray(module_ids)) {
       await UserModuleService.updateUserModulesByRoleId(id, module_ids);
     }
 
-    // Fetch updated modules
-    const updatedModules = await UserModuleService.getUserModuleByRoleId(id);
-
-    // Flatten and clean module objects
-    const modulesRaw = updatedModules.flatMap(m => {
-      const mods = Array.isArray(m.module_id)
-        ? (m.module_id as IModule[])
-        : [(m.module_id as IModule)];
-
-      return mods.map(mod => ({
-        _id: mod._id.toString(),
-        module: mod.module,
-        modulelanguagekey: mod.modulelanguagekey,
-        sort: mod.sort,
-        parent: mod.parent,
-      }));
-    });
-
-    // ❗ Remove duplicates by _id
-    const uniqueModules = Array.from(
-      new Map(modulesRaw.map(m => [m._id, m])).values()
+    const modulesClean = extractRoleModules(
+      await UserModuleService.getUserModuleByRoleId(id)
     );
 
     return res.status(200).json({
       _id: id,
       name,
-      modules: uniqueModules,
+      modules: modulesClean,
     });
-
   } catch (err: any) {
-    console.error(err);
     return res.status(500).json({ message: err.message });
   }
 };
 
-
-// --- DELETE ROLE ---
 export const DeleteRoleController = async (req: Request, res: Response) => {
   const { id } = req.params;
 
@@ -202,12 +136,10 @@ export const DeleteRoleController = async (req: Request, res: Response) => {
 
     if (!deleted) return res.status(404).json({ message: "Role not found" });
 
-    // Delete associated modules
     await UserModuleService.deleteUserModulesByRoleId(id);
 
     return res.status(200).json({ message: "Role deleted successfully" });
   } catch (err: any) {
-    console.error(err);
     return res.status(500).json({ message: err.message });
   }
 };
