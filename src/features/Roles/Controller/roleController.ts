@@ -142,11 +142,15 @@ export const UpdateRoleController = async (req: Request, res: Response) => {
 
   try {
     if (name && !RoleNameRegex.test(name)) {
-      return res.status(400).json({ message: "Invalid Role Name format; it should contain letters only" });
+      return res
+        .status(400)
+        .json({ message: "Invalid Role Name format; it should contain letters only" });
     }
 
-    // Update role name
-    await RoleUpdateServices(id, { name });
+    // Update role name only if provided
+    if (name) {
+      await RoleUpdateServices(id, { name });
+    }
 
     // Update modules if provided
     if (Array.isArray(module_ids)) {
@@ -156,10 +160,14 @@ export const UpdateRoleController = async (req: Request, res: Response) => {
     // Fetch updated modules
     const updatedModules = await UserModuleService.getUserModuleByRoleId(id);
 
-    const modules = updatedModules.flatMap(m => {
-      const mods = Array.isArray(m.module_id) ? (m.module_id as IModule[]) : [(m.module_id as IModule)];
+    // Flatten and clean module objects
+    const modulesRaw = updatedModules.flatMap(m => {
+      const mods = Array.isArray(m.module_id)
+        ? (m.module_id as IModule[])
+        : [(m.module_id as IModule)];
+
       return mods.map(mod => ({
-        _id: mod._id,
+        _id: mod._id.toString(),
         module: mod.module,
         modulelanguagekey: mod.modulelanguagekey,
         sort: mod.sort,
@@ -167,16 +175,23 @@ export const UpdateRoleController = async (req: Request, res: Response) => {
       }));
     });
 
+    // ❗ Remove duplicates by _id
+    const uniqueModules = Array.from(
+      new Map(modulesRaw.map(m => [m._id, m])).values()
+    );
+
     return res.status(200).json({
       _id: id,
       name,
-      modules,
+      modules: uniqueModules,
     });
+
   } catch (err: any) {
     console.error(err);
     return res.status(500).json({ message: err.message });
   }
 };
+
 
 // --- DELETE ROLE ---
 export const DeleteRoleController = async (req: Request, res: Response) => {

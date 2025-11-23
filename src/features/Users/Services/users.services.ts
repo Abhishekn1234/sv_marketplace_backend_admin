@@ -1,20 +1,35 @@
-import { IUser,User } from "shared-lib";
-import { Request,Response } from "express";
-import { userRepo } from "shared-lib";
+import { checkModuleAccess, IUser, userRepo } from "shared-lib";
 
-export const userAddServices=async(req:Request,res:Response)=>{
-    const useradd=await userRepo.createUser(req.body);
-    return useradd;
-}
-export const userFindServices=async(req:Request,res:Response)=>{
-    const userfind=await userRepo.getUserById(req.params.id);
-    return userfind;
-}
-export const userFindAllServices=async(req:Request,res:Response)=>{
-    const userfindall=await userRepo.getAllUsers();
-   return userfindall;
-}
-export const userDeleteServices=async(req:Request,res:Response)=>{
-    const userdelete=await userRepo.deleteUser(req.params.id); 
-    return userdelete;
-}
+export const userAddServices = async (data: IUser, loggedInUserId: string) => {
+//   await checkModuleAccess(loggedInUserId, "Users Create");
+  return await userRepo.createUser(data);
+};
+
+export const userFindServices = async (id: string, loggedInUserId: string) => {
+//   await checkModuleAccess(loggedInUserId, "Users View");
+  return await userRepo.getUserById(id);
+};
+
+export const userFindAllServices = async (loggedInUserId: string) => {
+//   await checkModuleAccess(loggedInUserId, "Users View");
+  return await userRepo.getAllUsers();
+};
+
+export const userUpdateServices = async (
+  id: string,
+  payload: Partial<IUser>,
+  loggedInUserId: string
+) => {
+//   await checkModuleAccess(loggedInUserId, "Users Update");
+  return await userRepo.updateUser(id, payload);
+};
+
+export const userDeleteServices = async (id: string, loggedInUserId: string) => {
+//   await checkModuleAccess(loggedInUserId, "Users Delete");
+  return await userRepo.deleteUser(id);
+};
+
+export const userVerifyServices = async (id: string, loggedInUserId: string) => {
+  await checkModuleAccess(loggedInUserId, "Users Verify");
+  return await userRepo.verifyUser(id);
+};
