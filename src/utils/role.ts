@@ -45,31 +45,20 @@ export const extractRoleModules = (userModules: any[]) => {
   return Array.from(new Map(raw.map((m) => [m._id.toString(), m])).values());
 };
 
-export const buildRoleMap = (userModules: any[]) => {
-  const roleMap = new Map<
-    string,
-    { _id: string; name: string; modules: IModule[] }
-  >();
+export function buildRoleMap(userModules: any[]) {
+  const map = new Map<string, IModule[]>();
 
-  userModules.forEach((um) => {
-    if (!um.user_group_id) return;
+  for (const entry of userModules) {
+    const roleId = String(entry.user_group_id);
 
-    const role = um.user_group_id as UserRole;
-
-    const mods = Array.isArray(um.module_id)
-      ? (um.module_id as IModule[])
-      : [(um.module_id as IModule)];
-
-    if (!roleMap.has(role._id.toString())) {
-      roleMap.set(role._id.toString(), {
-        _id: role._id.toString(),
-        name: role.name,
-        modules: [],
-      });
+    if (!map.has(roleId)) {
+      map.set(roleId, []);
     }
 
-    roleMap.get(role._id.toString())?.modules.push(...mods);
-  });
+    for (const mod of entry.module_id || []) {
+      map.get(roleId)!.push(mod as IModule);
+    }
+  }
 
-  return roleMap;
-};
+  return map;
+}

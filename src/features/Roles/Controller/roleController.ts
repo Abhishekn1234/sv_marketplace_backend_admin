@@ -5,7 +5,7 @@ import {
   RoleUpdateServices,
   RoleDeleteServices,
 } from "../Services/RoleService";
-import { IModule, UserRole, UserModuleService, RoleNameRegex } from "shared-lib";
+import { IModule, UserRole, UserModuleService, RoleNameRegex, Rolefunctions } from "shared-lib";
 
 import {
   formatModules,
@@ -48,27 +48,39 @@ export const CreateRoleController = async (req: Request, res: Response) => {
   }
 };
 
+
+
 export const GetRoleController = async (_req: Request, res: Response) => {
   try {
+    const roles = await Rolefunctions.fetchRoles();
     const userModules = await UserModuleService.getAllUserModules();
-    const roleMap = buildRoleMap(userModules);
 
-    const roles = Array.from(roleMap.values()).map((role) => ({
-      ...role,
-      modules: role.modules.map((mod) => ({
-        _id: mod._id,
-        module: mod.module,
-        modulelanguagekey: mod.modulelanguagekey,
-        sort: mod.sort,
-        parent: mod.parent,
-      })),
-    }));
+    const roleModuleMap = buildRoleMap(userModules); // always Map<string, IModule[]>
 
-    return res.status(200).json(roles);
+    const response = roles.map((role) => {
+      const roleModules = roleModuleMap.get(String(role._id)) || [];
+
+      return {
+        _id: role._id,
+        name: role.name,
+        modules: roleModules.map((mod) => ({
+          _id: mod._id,
+          module: mod.module,
+          modulelanguagekey: mod.modulelanguagekey,
+          sort: mod.sort,
+          parent: mod.parent,
+        }))
+      };
+    });
+
+    return res.status(200).json(response);
   } catch (err: any) {
     return res.status(500).json({ message: err.message });
   }
 };
+
+
+
 
 export const GetRoleByIdController = async (req: Request, res: Response) => {
   const { id } = req.params;
